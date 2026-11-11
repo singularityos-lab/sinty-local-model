@@ -44,7 +44,7 @@ jobs:
             -DCMAKE_C_COMPILER=/tmp/zcc -DCMAKE_CXX_COMPILER=/tmp/zcxx \
             -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
             -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
-            -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_TOOLS=ON $cpu
+            -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_TOOLS=ON -DCMAKE_EXE_LINKER_FLAGS=-s $cpu
           ninja -C build llama-server
 
       - name: Assemble the payload

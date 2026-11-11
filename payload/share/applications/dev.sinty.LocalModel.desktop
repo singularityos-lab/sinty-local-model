@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Local Model
+Comment=Answers Sinty AI on this computer, without sending anything out
+NoDisplay=true
+Terminal=false

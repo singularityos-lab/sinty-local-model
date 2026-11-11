@@ -1,0 +1,81 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    env:
+      LLAMA: b12284
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.16.0
+        run: |
+          curl --fail --location --silent --show-error https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz --output /tmp/zig.tar.xz
+          echo '70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00  /tmp/zig.tar.xz' | sha256sum -c -
+          tar -xJf /tmp/zig.tar.xz -C /tmp
+          echo /tmp/zig-x86_64-linux-0.16.0 >> "$GITHUB_PATH"
+
+      - name: Fetch llama.cpp
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build qemu-user-static
+          git clone --quiet --depth 1 --branch "$LLAMA" https://github.com/ggml-org/llama.cpp llama
+
+      - name: Build
+        run: |
+          arch=${{ matrix.arch }}
+          printf '#!/bin/sh\nexec zig cc -target %s-linux-gnu.2.42 "$@"\n' "$arch" > /tmp/zcc
+          printf '#!/bin/sh\nexec zig c++ -target %s-linux-gnu.2.42 "$@"\n' "$arch" > /tmp/zcxx
+          chmod +x /tmp/zcc /tmp/zcxx
+          if [ "$arch" = x86_64 ]; then
+            cpu="-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON"
+          else
+            cpu="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod"
+          fi
+          cmake -S llama -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=/tmp/zcc -DCMAKE_CXX_COMPILER=/tmp/zcxx \
+            -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+            -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_TOOLS=ON \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib' -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON $cpu
+          ninja -C build llama-server
+
+      - name: Assemble the payload
+        run: |
+          arch=${{ matrix.arch }}
+          out=payload-$arch
+          cp -a payload "$out"
+          install -m 0755 build/bin/llama-server "$out/bin/llama-server"
+          mkdir -p "$out/lib"
+          find build/bin -maxdepth 1 -name '*.so*' -exec cp -a {} "$out/lib/" \;
+          find "$out" -type f | sort
+          tar -C "$out" -cf - . | zstd -19 -q -o "$out.tar.zst"
+
+      - name: Smoke test
+        run: |
+          arch=${{ matrix.arch }}
+          root=$PWD/payload-$arch
+          curl --fail --location --silent --show-error --output /tmp/tiny.gguf \
+            https://huggingface.co/ggml-org/models/resolve/main/tinyllamas/stories260K.gguf
+          run=""
+          if [ "$arch" = aarch64 ]; then
+            sudo apt-get install -y -qq libc6-arm64-cross
+            run="qemu-aarch64-static -L /usr/aarch64-linux-gnu"
+          fi
+          $run "$root/bin/llama-server" -m /tmp/tiny.gguf --host 127.0.0.1 --port 11435 --alias local --no-webui > /tmp/server.log 2>&1 &
+          for i in $(seq 1 120); do curl -sf http://127.0.0.1:11435/health && break; sleep 2; done
+          curl -sf http://127.0.0.1:11435/v1/chat/completions -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"hello"}],"max_tokens":8}' | tee /tmp/reply.json
+          grep -q '"choices"' /tmp/reply.json || { cat /tmp/server.log; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payload-${{ matrix.arch }}
+          path: payload-${{ matrix.arch }}.tar.zst

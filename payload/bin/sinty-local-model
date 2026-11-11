@@ -1,0 +1,19 @@
+#!/bin/sh
+set -u
+app=$(dirname "$(dirname "$(readlink -f "$0")")")
+data=${XDG_DATA_HOME:-$HOME/.local/share}/sinty-local-model
+name=Qwen3-4B-Q4_K_M.gguf
+sum=7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
+url=https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/$name
+model=${SINTY_LOCAL_MODEL:-$data/$name}
+mkdir -p "$data"
+if [ ! -f "$model" ]; then
+    curl -fsSL --retry 10 --retry-all-errors -C - -o "$model.part" "$url" || exit 1
+    if ! echo "$sum  $model.part" | sha256sum -c --status; then
+        rm -f "$model.part"
+        exit 1
+    fi
+    mv "$model.part" "$model"
+fi
+exec "$app/bin/llama-server" -m "$model" --host 127.0.0.1 --port "${SINTY_LOCAL_PORT:-11435}" \
+    --jinja --ctx-size 16384 --alias local --no-webui

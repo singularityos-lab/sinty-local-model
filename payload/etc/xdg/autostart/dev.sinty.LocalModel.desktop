@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Local Model
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-Phase=Applications

@@ -13,7 +13,8 @@ its SHA-256 before using it. Set `SINTY_LOCAL_MODEL` to the path of another GGUF
 file to use a different model.
 
 The server is [llama.cpp](https://github.com/ggml-org/llama.cpp), built by the
-workflow in this repository for x86_64 and aarch64 against glibc 2.42.
+workflow in this repository as one static program for x86_64 (processors with
+AVX2, from 2013 on) and aarch64 (any ARMv8), against glibc 2.42.
 
 ## License
 

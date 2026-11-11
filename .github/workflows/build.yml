@@ -9,6 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         arch: [x86_64, aarch64]
     env:
@@ -35,16 +36,15 @@ jobs:
           printf '#!/bin/sh\nexec zig c++ -target %s-linux-gnu.2.42 "$@"\n' "$arch" > /tmp/zcxx
           chmod +x /tmp/zcc /tmp/zcxx
           if [ "$arch" = x86_64 ]; then
-            cpu="-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON"
+            cpu="-DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON"
           else
             cpu="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64"
           fi
           cmake -S llama -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=/tmp/zcc -DCMAKE_CXX_COMPILER=/tmp/zcxx \
-            -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+            -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
             -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
-            -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_TOOLS=ON \
-            -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib' -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON $cpu
+            -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_TOOLS=ON $cpu
           ninja -C build llama-server
 
       - name: Assemble the payload
@@ -53,8 +53,6 @@ jobs:
           out=payload-$arch
           cp -a payload "$out"
           install -m 0755 build/bin/llama-server "$out/bin/llama-server"
-          mkdir -p "$out/lib"
-          find build/bin -maxdepth 1 -name '*.so*' -exec cp -a {} "$out/lib/" \;
           find "$out" -type f | sort
           tar -C "$out" -cf - . | zstd -19 -q -o "$out.tar.zst"
 

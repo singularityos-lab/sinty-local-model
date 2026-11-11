@@ -37,7 +37,7 @@ jobs:
           if [ "$arch" = x86_64 ]; then
             cpu="-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON"
           else
-            cpu="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod"
+            cpu="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64"
           fi
           cmake -S llama -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=/tmp/zcc -DCMAKE_CXX_COMPILER=/tmp/zcxx \
